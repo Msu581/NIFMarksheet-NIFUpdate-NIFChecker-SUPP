@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marksheet Update Checker — MSU</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+<style>
+:root{
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --blue:#083D44; --blue2:#0B5A5E; --mid:#08807B; --mid-soft:#DCF2EF;
+  --paper:#EAF3F2; --card:#FFFFFF; --surface2:#F5FAF9;
+  --ink:#10201F; --ink2:#2E4644; --muted:#587170;
+  --line:#D4E6E3; --line-strong:#B8D4D0;
+  --green:#DCF0E6; --greenInk:#0F6B49;
+  --red:#FBE3E1; --redInk:#A32B26;
+  --amber:#FBEECF; --amberInk:#8A5A12;
+  --grey:#ECEFEF; --greyInk:#4A5C5B;
+  --r-sm:8px; --r-md:12px; --r-lg:18px;
+  --sh-2:0 2px 4px rgba(8,61,68,.05),0 8px 20px -8px rgba(8,61,68,.14);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--paper);line-height:1.5;font-size:15px}
+.wrap{max-width:1240px;margin:0 auto;padding:28px 20px 60px}
+header h1{margin:0;font-size:28px;color:var(--blue);letter-spacing:-.01em}
+header p{margin:6px 0 0;color:var(--muted);max-width:820px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sh-2);padding:20px;margin-top:20px}
+.card h2{margin:0 0 12px;font-size:16px;color:var(--blue2);text-transform:uppercase;letter-spacing:.06em}
+.rules{margin:0;padding-left:20px;color:var(--ink2);font-size:14px}
+.rules li{margin:3px 0}
+.slots{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.slot{border:2px dashed var(--line-strong);border-radius:var(--r-md);background:var(--surface2);padding:16px;transition:.15s;display:flex;flex-direction:column;gap:6px}
+.slot.over{border-color:var(--mid);background:var(--mid-soft)}
+.slot.ok{border-style:solid;border-color:var(--mid);background:#f1faf8}
+.slot.err{border-style:solid;border-color:var(--redInk);background:var(--red)}
+.slot .t{font-weight:700;color:var(--blue)}
+.slot .t small{display:block;font-weight:500;color:var(--muted)}
+.slot .fn{font-family:var(--mono);font-size:12px;color:var(--ink2);word-break:break-all}
+.slot .msg{font-size:13px;color:var(--muted)}
+.slot.ok .msg{color:var(--greenInk)} .slot.err .msg{color:var(--redInk)}
+.slot .warn{font-size:13px;color:var(--amberInk)}
+.opts{display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin:16px 0 14px}
+.opts b{color:var(--ink2)}
+.opts label{display:inline-flex;gap:6px;align-items:center;cursor:pointer}
+.hint{color:var(--muted);font-size:13px}
+#drop{border:2px dashed var(--line-strong);border-radius:var(--r-lg);background:var(--surface2);padding:30px 20px;text-align:center;transition:.15s}
+#drop.over{border-color:var(--mid);background:var(--mid-soft)}
+#drop .big{font-size:18px;font-weight:600;color:var(--blue)}
+#drop .small{color:var(--muted);margin:4px 0 16px}
+button{font:inherit;cursor:pointer;border-radius:var(--r-sm);border:1px solid var(--line-strong);background:#fff;color:var(--blue);padding:9px 16px;font-weight:600}
+button:hover{background:var(--mid-soft)}
+button.primary{background:var(--blue2);color:#fff;border-color:var(--blue2)}
+button.primary:hover{background:var(--blue)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.filebar{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:16px}
+#fileinfo b{color:var(--blue)}
+#filelist{margin:10px 0 0;max-height:120px;overflow:auto;font-family:var(--mono);font-size:12px;color:var(--muted);background:var(--surface2);border:1px solid var(--line);border-radius:var(--r-sm);padding:8px 12px;display:none}
+.progress{height:8px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:14px;display:none}
+.progress>i{display:block;height:100%;width:0;background:var(--mid);transition:width .1s}
+#ptext{font-size:13px;color:var(--muted);margin-top:6px;display:none}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.stat{border:1px solid var(--line);border-radius:var(--r-md);padding:12px 14px;background:var(--surface2)}
+.stat b{display:block;font-size:28px;line-height:1.1;color:var(--blue)}
+.stat span{color:var(--muted);font-size:13px}
+.stat.bad b{color:var(--redInk)} .stat.good b{color:var(--greenInk)} .stat.warn b{color:var(--amberInk)}
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:18px 0 10px}
+.toolbar input[type=search],.toolbar select{font:inherit;padding:8px 12px;border:1px solid var(--line-strong);border-radius:var(--r-sm);background:#fff}
+.toolbar input[type=search]{min-width:240px}
+.spacer{flex:1}
+table{border-collapse:collapse;width:100%}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);background:var(--surface2);position:sticky;top:0}
+.tablewrap{overflow:auto;border:1px solid var(--line);border-radius:var(--r-md);max-height:70vh}
+tr.main{cursor:pointer}
+tr.main:hover td{background:var(--surface2)}
+tr.main td:first-child::before{content:"▸ ";color:var(--muted)}
+tr.main.open td:first-child::before{content:"▾ "}
+.tag{display:inline-block;border-radius:99px;padding:2px 10px;font-size:12px;font-weight:700;white-space:nowrap}
+.tag.ok{background:var(--green);color:var(--greenInk)}
+.tag.bad{background:var(--red);color:var(--redInk)}
+.tag.warn{background:var(--amber);color:var(--amberInk)}
+.tag.na{background:var(--grey);color:var(--greyInk)}
+.mono{font-family:var(--mono);font-size:13px}
+td.det{background:#fbfdfd;padding:14px 18px}
+.det h3{margin:12px 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--blue2)}
+.det h3:first-child{margin-top:0}
+.det table{font-size:13.5px;background:#fff}
+.det td.badcell{background:var(--red);color:var(--redInk);font-weight:700}
+.det td.okcell{color:var(--greenInk)}
+.note{color:var(--muted);font-size:12.5px}
+.empty{padding:30px;text-align:center;color:var(--muted)}
+.foot{margin-top:30px;color:var(--muted);font-size:12.5px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Marksheet Update Checker</h1>
+  <p>Checks every student's marksheet PDF against the two result lists: did the marks that were updated after the backlog / supplementary exams actually reach the marksheet, and is the grade right for those marks? Produces a formal Excel report.</p>
+</header>
+
+<section class="card">
+  <h2>How it decides</h2>
+  <ol class="rules">
+    <li>The student is read from the marksheet (Registration No., name, programme, specialization) and found in the lists by <b>Registration / Enrollment No.</b>; name, programme and specialization are cross-checked.</li>
+    <li>Each course on the marksheet is matched to the list rows by <b>course code or subject name</b>.</li>
+    <li><b>Latest list</b> (Updated Supplementary) beats the <b>Older list</b> (Master Backlog). Only a real result counts: in the latest list "To update on TruScholar = Yes"; in the older list "Attendance = Present". Absent / "No" rows are not updates.</li>
+    <li>Marksheet marks = latest valid result → <b>UPDATED</b>. Anything else → <b>NOT UPDATED</b> (and it says whether the older marks are still showing).</li>
+    <li>The grade on the marksheet is checked against the marks using the <b>grade scale Excel</b> (Old or New — your choice).</li>
+  </ol>
+</section>
+
+<section class="card">
+  <h2>1 · Result lists &amp; grade scale (Excel)</h2>
+  <div class="slots">
+    <div class="slot" id="slotLATEST" data-role="LATEST">
+      <div class="t">Latest list<small>Updated Supplementary list (Nov / Dec 2025)</small></div>
+      <div class="fn" id="fnLATEST">No file chosen</div><div class="msg" id="msgLATEST">Drop the .xlsx here or</div>
+      <div><button type="button" data-pick="LATEST">Choose Excel…</button></div>
+      <input type="file" accept=".xlsx,.xlsm" hidden id="inLATEST">
+    </div>
+    <div class="slot" id="slotOLDER" data-role="OLDER">
+      <div class="t">Older list<small>Master Backlog result (June – July 2025)</small></div>
+      <div class="fn" id="fnOLDER">No file chosen</div><div class="msg" id="msgOLDER">Drop the .xlsx here or</div>
+      <div><button type="button" data-pick="OLDER">Choose Excel…</button></div>
+      <input type="file" accept=".xlsx,.xlsm" hidden id="inOLDER">
+    </div>
+    <div class="slot" id="slotGRADE" data-role="GRADE">
+      <div class="t">Grade scale<small>Old / New grade Excel (optional — built-in copy is identical)</small></div>
+      <div class="fn" id="fnGRADE">Using built-in scale</div><div class="msg" id="msgGRADE">Drop the .xlsx here or</div>
+      <div><button type="button" data-pick="GRADE">Choose Excel…</button></div>
+      <input type="file" accept=".xlsx,.xlsm" hidden id="inGRADE">
+    </div>
+  </div>
+  <div class="opts">
+    <b>Grade scale for the marksheets:</b>
+    <label><input type="radio" name="scale" value="old" checked> Old</label>
+    <label><input type="radio" name="scale" value="new"> New</label>
+    <span class="hint" id="scalehint"></span>
+  </div>
+</section>
+
+<section class="card">
+  <h2>2 · Marksheet PDFs</h2>
+  <div id="drop">
+    <div class="big">Drag &amp; drop marksheet PDFs or a whole folder here</div>
+    <div class="small">Sub-folders are scanned too. Only .pdf files are used. One or hundreds at a time.</div>
+    <div class="btns">
+      <button id="btnFolder" type="button">📁 Select folder</button>
+      <button id="btnPdf" type="button">📄 Select PDF file(s)</button>
+    </div>
+  </div>
+  <input id="pickFolder" type="file" webkitdirectory directory multiple hidden>
+  <input id="pickPdf" type="file" accept="application/pdf,.pdf" multiple hidden>
+  <div class="filebar">
+    <div id="fileinfo">No PDFs added yet.</div>
+    <div class="btns">
+      <button id="btnClear" type="button" disabled>Clear</button>
+      <button id="btnRun" type="button" class="primary" disabled>Run check</button>
+    </div>
+  </div>
+  <div id="filelist"></div>
+  <div class="progress" id="pbar"><i></i></div>
+  <div id="ptext"></div>
+</section>
+
+<section class="card" id="results" style="display:none">
+  <h2>3 · Results</h2>
+  <div class="stats" id="stats"></div>
+  <div class="toolbar">
+    <select id="filter">
+      <option value="all">All students</option>
+      <option value="ACTION">Needs action (not updated / grade / review)</option>
+      <option value="NOT UPDATED">Not updated</option>
+      <option value="GRADE MISMATCH">Grade mismatch</option>
+      <option value="REVIEW">Review</option>
+      <option value="ALL UPDATED">All updated</option>
+      <option value="NO UPDATE DUE">No update due</option>
+      <option value="NO RECORD IN LISTS">No record in lists</option>
+      <option value="UNREADABLE">Unreadable PDFs</option>
+    </select>
+    <input type="search" id="search" placeholder="Search name, reg. no. or file…">
+    <span class="spacer"></span>
+    <button id="btnXlsx" type="button" class="primary">⬇ Download Excel report</button>
+  </div>
+  <div class="tablewrap"><table id="tbl"><thead><tr>
+    <th>Student</th><th>Registration No.</th><th>Programme · Specialization</th><th>Courses in lists</th><th>Status</th><th>Not updated</th><th>File</th>
+  </tr></thead><tbody id="tbody"></tbody></table></div>
+  <p class="note">Click a row to see each course: marks on the marksheet, the latest result, the older marks and the grade check.</p>
+</section>
+
+<div class="foot">Medhavi Skills University · Marksheet Update Checker</div>
+</div>
+
+<script>
+"use strict";
+/*CORE-START*/
+/* ══════════ helpers ══════════ */
+function txt(v){
+  if(v===null||v===undefined) return '';
+  if(v instanceof Date) return v.toISOString().slice(0,10);
+  if(typeof v==='object'){
+    if(v.result!==undefined) return txt(v.result);
+    if(Array.isArray(v.richText)) return v.richText.map(x=>x.text).join('').trim();
+    if(v.text!==undefined) return txt(v.text);
+    return '';
+  }
+  return String(v).trim();
+}
+const normEnroll=v=>txt(v).replace(/\.0+$/,'').replace(/\D/g,'');
+const normSubj=s=>String(s||'').toLowerCase().replace(/&/g,' and ').replace(/[^a-z0-9]+/g,' ').trim();
+
+/* ══════════ grade scale (read from the Old/New grade Excel) ══════════ */
+const DEFAULT_SCALES={
+  old:[['O',10,99],['A+',9,90],['A',8,80],['B+',7,70],['B',6,60],['C',5,50],['P',4,40],['F',0,null]],
+  new:[['O',10,90],['A+',9,80],['A',8,70],['B+',7,60],['B',6,50],['C',5,45],['P',4,40],['F',0,null]]
+};
+function parseGradeTable(rows){
+  let h=-1,gc,pc,nc,oc;
+  for(let i=0;i<Math.min(rows.length,30)&&h<0;i++){
+    const r=(rows[i]||[]).map(x=>txt(x).toLowerCase());
+    const g=r.findIndex(x=>x==='grade'), p=r.findIndex(x=>x==='grade points');
+    const n=r.findIndex(x=>x.includes('marks range')&&x.includes('new')), o=r.findIndex(x=>x.includes('marks range')&&x.includes('old'));
+    if(g>=0&&p>=0&&n>=0&&o>=0){h=i;gc=g;pc=p;nc=n;oc=o;}
+  }
+  if(h<0) return null;
+  const mk=col=>{
+    const out=[];
+    for(let i=h+1;i<rows.length;i++){
+      const r=rows[i]||[]; const g=txt(r[gc]); if(!g) continue;
+      const p=Number(txt(r[pc])); const rg=txt(r[col]);
+      let lo=null; const m=rg.match(/(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)/);
+      if(m) lo=Number(m[1]); else if(!/</.test(rg)) continue;
+      out.push([g,p,lo]);
+    }
+    out.sort((a,b)=>(b[2]===null?-1:b[2])-(a[2]===null?-1:a[2]));
+    return out;
+  };
+  const res={old:mk(oc),new:mk(nc)};
+  return res.old.length&&res.new.length?res:null;
+}
+function gradeFor(marks,scale){
+  const m=Number(marks);
+  for(const [g,p,lo] of scale) if(lo!==null&&m>=lo) return {g,p};
+  const f=scale.find(x=>x[2]===null)||['F',0,null]; return {g:f[0],p:f[1]};
+}
+
+/* ══════════ names, programmes, specialisations ══════════ */
+const tokens=s=>String(s||'').toLowerCase().replace(/[^\p{L}\s]/gu,' ').split(/\s+/).filter(Boolean);
+function nameMatch(a,b){
+  const x=tokens(a),y=tokens(b);
+  if(!x.length||!y.length) return 'UNKNOWN';
+  const X=new Set(x),Y=new Set(y);
+  if(X.size===Y.size&&[...X].every(t=>Y.has(t))) return 'MATCH';
+  const [sm,lg]=X.size<=Y.size?[X,Y]:[Y,X];
+  return [...sm].every(t=>lg.has(t))?'PARTIAL':'DIFFERENT';
+}
+function progKey(s){
+  const t=String(s||'').toLowerCase().replace(/[^a-z]/g,'');
+  if(/^(bachelorofvocation|bvoc)/.test(t)) return 'BVOC';
+  if(/^(bachelorofdesign|bdes)/.test(t)) return 'BDES';
+  if(/^(masterofvocation|mvoc)/.test(t)) return 'MVOC';
+  if(/^(masterofdesign|mdes)/.test(t)) return 'MDES';
+  return '';
+}
+function specKey(s){
+  const t=' '+String(s||'').toLowerCase().replace(/[^a-z]+/g,' ')+' ';
+  if(/fashion|\sfd\s/.test(t)) return 'FD';
+  if(/interior|\sid\s/.test(t)) return 'ID';
+  return '';
+}
+
+/* ══════════ page layout: PDF text items -> clean lines ══════════
+   Marksheets print two semesters side by side, and a long course name can wrap onto lines above /
+   below the line that holds the course code. The raw reading order of a PDF mixes all of that up,
+   so the page is rebuilt here: columns are split, and each course becomes one line
+   "CODE NAME T-P-PR MARKS GRADE". */
+const HEAD_RE=/^(FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH|SEVENTH|EIGHTH|NINTH|TENTH)\s+SEMESTER$/;
+const CODE_RE=/^[A-Z]{2,6}\d{3}[A-Z]?$/;
+const HDR_WORDS=new Set(['Course Name','Course Code','Credits (T-P-PR)','Marks','Grade','Grade Points','Credit Points','Course','Code','Points','Credits','(T-P-PR)','Name','Credit']);
+const joinLine=ln=>{const a=ln.slice().sort((p,q)=>p.x-q.x);let s='',end=null;for(const it of a){s+=(end!==null&&it.x-end<1.5?'':' ')+it.s.trim();end=it.x+it.w;}return s.trim();};
+function yLines(items,tol=3){
+  const sorted=items.slice().sort((a,b)=>b.y-a.y||a.x-b.x),lines=[];let cur=[],cy=null;
+  for(const it of sorted){if(cy===null||Math.abs(it.y-cy)<=tol){cur.push(it);if(cy===null)cy=it.y;}else{lines.push(cur);cur=[it];cy=it.y;}}
+  if(cur.length) lines.push(cur);
+  return lines.map(ln=>({y:ln[0].y,text:joinLine(ln)}));
+}
+function columnLines(items){
+  const anchors=items.filter(i=>CODE_RE.test(i.s.trim()));
+  if(!anchors.length) return yLines(items);
+  const ays=anchors.map(a=>a.y).sort((a,b)=>b-a);
+  let pitch=Infinity;for(let i=1;i<ays.length;i++){const g=ays[i-1]-ays[i];if(g>4&&g<pitch)pitch=g;}
+  const thresh=Math.max(6,(isFinite(pitch)?Math.min(pitch,40):13)*0.7);
+  const tppXs=items.filter(i=>/^\d+-\d+-\d+$/.test(i.s.trim())).map(i=>i.x);
+  const tppX=tppXs.length?Math.min(...tppXs)-3:Infinity;
+  const isFragCandidate=i=>{
+    const s=i.s.trim();
+    return !CODE_RE.test(s)&&!HDR_WORDS.has(s)&&!/^(CREDITS|SGPA)\s*:/i.test(s)&&!HEAD_RE.test(s)
+      &&!/^\d+-\d+-\d+$/.test(s)&&!/^\d+(\.\d+)?$/.test(s)&&!/^[A-Z]{1,2}\+?$/.test(s)&&i.x<tppX;
+  };
+  const rows=anchors.map(a=>({a,frags:[],cells:[]}));
+  const used=new Set(anchors);
+  for(const it of items){
+    if(used.has(it)) continue;
+    if(isFragCandidate(it)){
+      let best=null,bd=Infinity;rows.forEach(r=>{const d=Math.abs(it.y-r.a.y);if(d<bd){bd=d;best=r;}});
+      if(best&&bd<=thresh&&it.x>best.a.x+10){best.frags.push(it);used.add(it);}
+    }
+  }
+  for(const it of items){
+    if(used.has(it)) continue;
+    const r=rows.find(r=>Math.abs(it.y-r.a.y)<=2.5);
+    if(r){r.cells.push(it);used.add(it);}
+  }
+  const out=rows.map(r=>{
+    const fr=r.frags.slice().sort((p,q)=>q.y-p.y||p.x-q.x).map(f=>f.s.trim()).join(' ');
+    return {y:r.a.y,text:[r.a.s.trim(),fr,joinLine(r.cells)].filter(Boolean).join(' ')};
+  });
+  const rest=items.filter(i=>!used.has(i));
+  return out.concat(yLines(rest)).sort((a,b)=>b.y-a.y);
+}
+function layoutPageText(items){
+  items=items.filter(i=>i.s&&i.s.trim());
+  if(!items.length) return '';
+  const heads=items.filter(i=>HEAD_RE.test(i.s.trim()));
+  let yTop=Infinity,bounds=[];
+  if(heads.length){
+    yTop=Math.max(...heads.map(h=>h.y))+2;
+    const xs=[...new Set(heads.map(h=>Math.round(h.x)))].sort((a,b)=>a-b),cl=[];
+    xs.forEach(x=>{if(!cl.length||x-cl[cl.length-1]>150)cl.push(x);});
+    bounds=cl.slice(1).map(x=>x-8);
+  }
+  const head=items.filter(i=>i.y>yTop), body=items.filter(i=>i.y<=yTop);
+  const lines=yLines(head).map(l=>l.text);
+  const ncol=bounds.length+1;
+  for(let c=0;c<ncol;c++){
+    const col=body.filter(i=>bounds.filter(b=>i.x>=b).length===c);
+    columnLines(col).forEach(l=>lines.push(l.text));
+  }
+  return lines.join('\n');
+}
+
+/* ══════════ reading a marksheet PDF's text ══════════ */
+const ORD={first:1,second:2,third:3,fourth:4,fifth:5,sixth:6,seventh:7,eighth:8,ninth:9,tenth:10};
+const SEM_RE="(?:FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH|SEVENTH|EIGHTH|NINTH|TENTH)\\s+SEMESTER";
+const LABELS="Father's Name|Mother's Name|Date of Birth|Aadhaar No\\.|ABC ID|SCHOOL OF|Category|Programme|Specialization|Registration No\\.|Year Of Admission|Year of Passing|MAX\\. MARKS|Course Code|"+SEM_RE;
+function field(text,label){
+  const re=new RegExp(label+"\\s*:\\s*(.*?)(?=\\s+(?:"+LABELS+")(?=[\\s:]|$)|$)","i");
+  const m=text.match(re); return m?m[1].trim():'';
+}
+const END_MARK=/\b(?:CREDITS\s*:|Total\s+\d+-\d+-\d+|Maximum Marks|MAX\. MARKS|Date\s*:)/i;
+function parseRows(block){
+  const rowRe=/\b([A-Z]{2,6}\d{2,4}[A-Z]?)\s+(.+?)\s+(\d+)-(\d+)-(\d+)\s+(\d+(?:\.\d+)?|AB|ABS)\s+([A-Z]{1,2}\+?)(?:\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?))?(?=\s|$)/g;
+  const ms=[...block.matchAll(rowRe)];
+  const rows=ms.map((m,i)=>{
+    const next=i+1<ms.length?ms[i+1].index:block.length;
+    let left=block.slice(m.index+m[0].length,next);
+    if(i+1===ms.length) left=left.split(END_MARK)[0];
+    left=left.trim();
+    return {code:m[1],name:(m[2]+(left?' '+left:'')).trim(),tpp:`${m[3]}-${m[4]}-${m[5]}`,marks:m[6],grade:m[7],
+      gp:m[8]===undefined?null:m[8],cp:m[9]===undefined?null:m[9]};
+  });
+  const codes=(block.match(/(?:^|\s)[A-Z]{2,6}\d{3}[A-Z]?(?=\s)/g)||[]).length;
+  return {rows,codes};
+}
+function parseTranscripts(raw){
+  const parts=String(raw).replace(/\r/g,'').split(/(?=Name of (?:the )?Student\s*:)/i).filter(p=>/Name of (?:the )?Student\s*:/i.test(p));
+  return parts.map(part=>{
+    const text=part.replace(/\s+/g,' ').trim();
+    const warnings=[];
+    const header={
+      name:field(text,'Name of (?:the )?Student'), reg:(field(text,'Registration No\\.')||'').split(' ')[0],
+      programme:field(text,'Programme'), specialization:field(text,'Specialization'),
+      category:field(text,'Category'), year:field(text,'Year of Passing')||field(text,'Year Of Admission')
+    };
+    const semesters=[];
+    const heads=[...text.matchAll(/\b(FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH|SEVENTH|EIGHTH|NINTH|TENTH)\s+SEMESTER\b(?!\s*:)/g)];
+    if(heads.length){
+      heads.forEach((h,i)=>{
+        const start=h.index+h[0].length, end=i+1<heads.length?heads[i+1].index:text.length;
+        const {rows,codes}=parseRows(text.slice(start,end));
+        if(codes!==rows.length) warnings.push(`${h[1]} SEMESTER: read ${rows.length} courses but found ${codes} course codes — check this PDF manually`);
+        semesters.push({sem:ORD[h[1].toLowerCase()],rows});
+      });
+    }else{
+      const sm=field(text,'Semester');
+      const word=(sm.match(/(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)/i)||[])[1];
+      const cm=text.match(/\bCourse\b/);
+      const {rows,codes}=parseRows(text.slice(cm?cm.index:0));
+      if(rows.length&&codes!==rows.length) warnings.push(`read ${rows.length} courses but found ${codes} course codes — check this PDF manually`);
+      semesters.push({sem:word?ORD[word.toLowerCase()]:0,rows});
+    }
+    if(!semesters.some(s=>s.rows.length)) warnings.push('No courses could be read from this PDF');
+    return {header,semesters,warnings};
+  });
+}
+
+/* ══════════ reading the result sheets (rows of cells -> records) ══════════ */
+function recordsFromRows(rows,role,fileName,sheetName){
+  let h=-1,col={};
+  const find=(hs,pred)=>hs.findIndex(pred);
+  for(let i=0;i<Math.min(rows.length,40)&&h<0;i++){
+    const hs=(rows[i]||[]).map(x=>txt(x).toLowerCase());
+    const c={
+      enroll:find(hs,x=>x==='enrollment_no'||x==='enrollment no'||x==='enrolment_no'||x==='enrollment no.'),
+      total:find(hs,x=>x==='total marks'),
+      subj:find(hs,x=>x==='subj_name__01'||x==='subj_name'),
+      code:find(hs,x=>x==='subj_code'),
+      name:find(hs,x=>x==='name'),
+      program:find(hs,x=>x==='program'||x==='programme'),
+      spec:find(hs,x=>x==='specialisation'||x==='specialization'),
+      sem:find(hs,x=>x==='sem'||x==='semester'),
+      credit:find(hs,x=>x==='credit structure'),
+      before:find(hs,x=>x.startsWith('total marks obtained before')),
+      attendance:find(hs,x=>x.startsWith('end-term exam attendance')||x==='attendance'),
+      obtained:find(hs,x=>x.startsWith('marks obtained')||x.startsWith('marks_obatined')||x==='marks_obtained'),
+      grace:find(hs,x=>x==='grace'),
+      update:find(hs,x=>x.startsWith('to update on truscholar')),
+      passfail:find(hs,x=>x.startsWith('pass/fail')),
+      exam:find(hs,x=>x==='exam month and year'),
+      term:find(hs,x=>x==='term name')
+    };
+    if(c.enroll>=0&&c.total>=0&&(c.subj>=0||c.code>=0)){h=i;col=c;}
+  }
+  if(h<0) return null;
+  const g=(r,k)=>col[k]>=0?txt(r[col[k]]):'';
+  const records=[];
+  for(let i=h+1;i<rows.length;i++){
+    const r=rows[i]||[]; const enroll=normEnroll(r[col.enroll]);
+    if(!enroll) continue;
+    const semM=g(r,'sem').match(/\d+/);
+    records.push({role,file:fileName,sheet:sheetName,rowNo:i+1,enroll,name:g(r,'name'),program:g(r,'program'),spec:g(r,'spec'),
+      sem:semM?Number(semM[0]):null,code:g(r,'code'),subj:g(r,'subj'),credit:g(r,'credit'),before:g(r,'before'),
+      attendance:g(r,'attendance'),obtained:g(r,'obtained'),grace:g(r,'grace'),total:g(r,'total'),update:g(r,'update'),
+      hasFlag:col.update>=0,passfail:g(r,'passfail'),exam:g(r,'exam'),term:g(r,'term')});
+  }
+  return {records,headerRow:h+1,warnings:[]};
+}
+/* A row only counts as a real result if the student actually appeared / the sheet says to update. */
+function isValidUpdate(rec){
+  if(rec.hasFlag) return /^yes/i.test(rec.update);
+  return /^present/i.test(rec.attendance);
+}
+
+/* ══════════ verifying one student's marksheet ══════════ */
+const sameMarks=(a,b)=>a!==''&&b!==''&&a!=null&&b!=null&&isFinite(a)&&isFinite(b)&&Math.abs(Number(a)-Number(b))<1e-9;
+function pickLast(list){return list.reduce((best,r)=>!best||r.rowNo>=best.rowNo?r:best,null);}
+
+function verifyStudent(student,records,scale){
+  const H=student.header, enroll=normEnroll(H.reg);
+  const recs=records.filter(r=>r.enroll===enroll);
+  /* identity */
+  const ref=recs.find(r=>r.role==='LATEST')||recs[0]||null;
+  const identity={sheetName:'',sheetProgramme:'',sheetSpec:'',nameStatus:'UNKNOWN',programmeStatus:'UNKNOWN',specStatus:'UNKNOWN',ok:true,notes:[]};
+  if(ref){
+    identity.sheetName=ref.name; identity.sheetProgramme=ref.program; identity.sheetSpec=ref.spec||'';
+    identity.nameStatus=nameMatch(H.name,ref.name);
+    const pk=progKey(H.programme), sk=progKey(ref.program);
+    identity.programmeStatus=!pk||!sk?'UNKNOWN':(pk===sk?'MATCH':'DIFFERENT');
+    const ps=specKey(H.specialization), ss=specKey(ref.spec)||specKey(ref.program);
+    identity.specStatus=!ps||!ss?'UNKNOWN':(ps===ss?'MATCH':'DIFFERENT');
+    if(identity.nameStatus==='DIFFERENT') identity.notes.push(`Name differs: marksheet "${H.name}" vs list "${ref.name}"`);
+    if(identity.nameStatus==='PARTIAL') identity.notes.push(`Name only partly matches: marksheet "${H.name}" vs list "${ref.name}"`);
+    if(identity.programmeStatus==='DIFFERENT') identity.notes.push(`Programme differs: marksheet "${H.programme}" vs list "${ref.program}"`);
+    if(identity.specStatus==='DIFFERENT') identity.notes.push(`Specialization differs: marksheet "${H.specialization}" vs list "${ref.spec||ref.program}"`);
+    identity.ok=identity.nameStatus!=='DIFFERENT'&&identity.programmeStatus!=='DIFFERENT'&&identity.specStatus!=='DIFFERENT';
+  }
+  /* courses of the marksheet */
+  const courses=[]; student.semesters.forEach(sm=>sm.rows.forEach(r=>courses.push(Object.assign({},r,{sem:sm.sem}))));
+  const assigned=courses.map(()=>[]), unassigned=[];
+  recs.forEach(rec=>{
+    const cands=[];
+    courses.forEach((c,i)=>{
+      const byCode=!!(rec.code&&c.code&&rec.code.toUpperCase()===c.code.toUpperCase());
+      const byName=!!(rec.subj&&normSubj(rec.subj)===normSubj(c.name));
+      if(byCode||byName) cands.push({i,semEq:rec.sem!=null&&rec.sem===c.sem?1:0,byCode:byCode?1:0,byName:byName?1:0});
+    });
+    if(!cands.length){unassigned.push(rec);return;}
+    cands.sort((a,b)=>(b.semEq-a.semEq)||(b.byCode-a.byCode)||(b.byName-a.byName)||(a.i-b.i));
+    assigned[cands[0].i].push(rec);
+  });
+  const srcLabel=r=>r==='LATEST'?'latest list':'older (master) list';
+  /* decide the latest valid result among the rows of ONE course */
+  const decide=list=>{
+    const vl=pickLast(list.filter(r=>r.role==='LATEST'&&isValidUpdate(r)));
+    const vo=pickLast(list.filter(r=>r.role==='OLDER'&&isValidUpdate(r)));
+    const latest=vl||vo;
+    let olderMarks=null,olderSource='';
+    if(latest&&latest.role==='LATEST'){
+      if(vo){olderMarks=vo.total;olderSource='older (master) list';}
+      else if(latest.before!==''){olderMarks=latest.before;olderSource='marks before the supplementary exam';}
+    }
+    const anyLatest=pickLast(list.filter(r=>r.role==='LATEST'));
+    const baseline=!latest&&anyLatest&&anyLatest.before!==''?anyLatest.before:null;
+    return {latest,olderMarks,olderSource,baseline};
+  };
+  const out=[];
+  courses.forEach((c,i)=>{
+    const list=assigned[i]; if(!list.length) return;
+    const d=decide(list), L=d.latest;
+    const pdfMarks=c.marks;
+    const numeric=isFinite(pdfMarks);
+    let status,remark='';
+    if(L){
+      if(sameMarks(pdfMarks,L.total)){
+        status='UPDATED';
+        remark=`Marksheet marks ${pdfMarks} match the ${srcLabel(L.role)} result (${L.total}).`+(d.olderMarks!=null?` Earlier marks were ${d.olderMarks}.`:'');
+      }else{
+        status='NOT UPDATED';
+        remark=d.olderMarks!=null&&sameMarks(pdfMarks,d.olderMarks)
+          ?`Marksheet still shows the older marks (${pdfMarks}, from ${d.olderSource}); the ${srcLabel(L.role)} result is ${L.total}.`
+          :`Marksheet shows ${pdfMarks}, but the ${srcLabel(L.role)} result is ${L.total}.`;
+      }
+    }else if(d.baseline!=null){
+      if(sameMarks(pdfMarks,d.baseline)){status='NO UPDATE DUE';remark=`No valid new result (absent / not to be updated); marksheet keeps the earlier marks ${pdfMarks}.`;}
+      else{status='REVIEW';remark=`No valid new result in the lists, but marksheet shows ${pdfMarks} while the marks before the supplementary exam were ${d.baseline}.`;}
+    }else{
+      status='NO UPDATE DUE'; remark='No valid new result in the lists (absent / not to be updated).';
+    }
+    const semNote=list.find(r=>r.sem!=null&&r.sem!==c.sem);
+    if(semNote) remark+=` Note: the list shows semester ${semNote.sem}, the marksheet shows semester ${c.sem}.`;
+    const pdfExp=numeric?gradeFor(pdfMarks,scale).g:null;
+    const gradeOK=pdfExp===null?true:String(c.grade).toUpperCase()===pdfExp;
+    out.push({sem:c.sem,code:c.code,name:c.name,tpp:c.tpp,pdfMarks,pdfGrade:c.grade,status,
+      source:L?L.role:'',latestMarks:L?L.total:'',olderMarks:d.olderMarks==null?'':d.olderMarks,olderSource:d.olderSource,
+      expGrade:L?gradeFor(L.total,scale).g:'',pdfExpGrade:pdfExp||'',gradeOK,remark,recs:list,latestRec:L||null});
+  });
+  /* valid / invalid list rows that match no course on the marksheet */
+  const groups=new Map();
+  unassigned.forEach(r=>{const k=normSubj(r.subj)+'|'+(r.sem==null?'':r.sem); if(!groups.has(k)) groups.set(k,[]); groups.get(k).push(r);});
+  /* only real results matter here: a valid result with no matching course on the marksheet */
+  const missing=[...groups.values()].map(list=>{
+    const d=decide(list), L=d.latest, any=list[0];
+    return L?{sem:any.sem,code:any.code,name:any.subj,status:'MISSING IN PDF',latestMarks:L.total,source:L.role,
+      remark:`The ${srcLabel(L.role)} has a valid result (${L.total}) for this course but it was not found on the marksheet.`,recs:list}:null;
+  }).filter(Boolean);
+  /* student totals + overall status */
+  const n=s=>out.filter(c=>c.status===s).length;
+  const counts={updated:n('UPDATED'),notUpdated:n('NOT UPDATED'),noUpdateDue:n('NO UPDATE DUE'),
+    review:n('REVIEW')+missing.filter(m=>m.status==='MISSING IN PDF').length,gradeMismatch:out.filter(c=>!c.gradeOK).length};
+  let status;
+  if(!recs.length) status='NO RECORD IN LISTS';
+  else if(counts.notUpdated) status='NOT UPDATED';
+  else if(counts.gradeMismatch) status='GRADE MISMATCH';
+  else if(counts.review||!identity.ok) status='REVIEW';
+  else if(counts.updated) status='ALL UPDATED';
+  else status='NO UPDATE DUE';
+  recs.forEach(r=>{r.valid=isValidUpdate(r);});
+  return {identity,hasRecords:recs.length>0,courses:out,missing,counts,status,pdfCourseCount:courses.length,recs};
+}
+/*CORE-END*/
+
+/* ═══════════════════════ UI ═══════════════════════ */
+pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+const $=s=>document.querySelector(s);
+const esc=v=>v==null?'':String(v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let SRC={LATEST:null,OLDER:null};   // loaded result lists
+let SCALES=DEFAULT_SCALES, SCALE_FROM='built-in scale (same as the Old/New grade Excel)';
+let FILES=[], RESULTS=[], ISSUES=[], RUNINFO=null;
+
+/* ---------- grade scale hint ---------- */
+const scaleText=arr=>arr.map(([g,p,lo],i)=>lo===null?`${g} below ${arr[i-1][2]}`:`${g} ${lo}${i===0?'–100':'–'+(arr[i-1][2]-1)}`).join(' · ');
+function showScaleHint(){const k=document.querySelector('input[name=scale]:checked').value;$('#scalehint').textContent=scaleText(SCALES[k]);}
+document.querySelectorAll('input[name=scale]').forEach(r=>r.onchange=showScaleHint); showScaleHint();
+
+/* ---------- Excel slots ---------- */
+async function sheetsOf(file){
+  const wb=new ExcelJS.Workbook(); await wb.xlsx.load(await file.arrayBuffer());
+  return wb.worksheets.map(ws=>{
+    const rows=[],nc=ws.columnCount;
+    for(let r=1;r<=ws.rowCount;r++){const row=ws.getRow(r),arr=new Array(nc);for(let c=1;c<=nc;c++)arr[c-1]=txt(row.getCell(c).value);rows.push(arr);}
+    return {name:ws.name,rows};
+  });
+}
+function slotState(role,cls,fn,msg,warn){
+  const s=$('#slot'+role); s.classList.remove('ok','err'); if(cls) s.classList.add(cls);
+  $('#fn'+role).textContent=fn; $('#msg'+role).textContent=msg;
+  let w=s.querySelector('.warn'); if(w) w.remove();
+  if(warn){w=document.createElement('div');w.className='warn';w.textContent='⚠ '+warn;s.appendChild(w);}
+}
+async function loadSlot(role,file){
+  if(!file) return;
+  slotState(role,'', file.name,'Reading…');
+  try{
+    const sheets=await sheetsOf(file);
+    if(role==='GRADE'){
+      for(const sh of sheets){const g=parseGradeTable(sh.rows); if(g){SCALES=g;SCALE_FROM=file.name;
+        slotState('GRADE','ok',file.name,'Scale read from the file.'); showScaleHint(); return;}}
+      slotState('GRADE','err',file.name,'No Grade / Grade Points / Marks Range(New) / Marks Range(OLD) table found — built-in scale is used instead.');
+      SCALES=DEFAULT_SCALES; SCALE_FROM='built-in scale (same as the Old/New grade Excel)'; showScaleHint(); return;
+    }
+    const records=[],used=[]; let flag=false;
+    for(const sh of sheets){
+      const r=recordsFromRows(sh.rows,role,file.name,sh.name);
+      if(r&&r.records.length){records.push(...r.records);used.push(sh.name);if(r.records[0].hasFlag)flag=true;}
+    }
+    if(!records.length){SRC[role]=null;slotState(role,'err',file.name,'Could not find the ENROLLMENT_NO / Total Marks columns in any sheet of this file.');updateRun();return;}
+    SRC[role]={file:file.name,records,sheets:used,students:new Set(records.map(r=>r.enroll)).size,hasFlag:flag};
+    let warn='';
+    if(role==='LATEST'&&!flag) warn='This file has no "To update on TruScholar" column — is it really the Updated Supplementary list? (Rows are then judged by attendance only.)';
+    if(role==='OLDER'&&flag) warn='This file has a "To update on TruScholar" column, which looks like the Updated Supplementary list — are the two files in the right boxes?';
+    slotState(role,'ok',file.name,`${records.length} rows · ${SRC[role].students} students · sheet${used.length>1?'s':''}: ${used.join(', ')}`,warn);
+  }catch(e){SRC[role]=null;slotState(role,'err',file.name,'Could not read this Excel file: '+(e&&e.message||e));}
+  updateRun();
+}
+document.querySelectorAll('.slot').forEach(sl=>{
+  const role=sl.dataset.role, input=sl.querySelector('input[type=file]');
+  sl.querySelector('button').onclick=()=>input.click();
+  input.onchange=e=>{loadSlot(role,e.target.files[0]);e.target.value='';};
+  ['dragenter','dragover'].forEach(ev=>sl.addEventListener(ev,e=>{e.preventDefault();sl.classList.add('over');}));
+  ['dragleave','drop'].forEach(ev=>sl.addEventListener(ev,e=>{e.preventDefault();sl.classList.remove('over');}));
+  sl.addEventListener('drop',e=>{const f=[...e.dataTransfer.files].find(x=>/\.xls[xm]$/i.test(x.name));if(f)loadSlot(role,f);});
+});
+
+/* ---------- PDFs ---------- */
+function updateRun(){
+  const n=FILES.length;
+  $('#fileinfo').innerHTML=n?`<b>${n}</b> PDF${n===1?'':'s'} ready to check.`:'No PDFs added yet.';
+  $('#btnClear').disabled=!n;
+  const ready=n&&(SRC.LATEST||SRC.OLDER);
+  $('#btnRun').disabled=!ready;
+  $('#btnRun').textContent=n?`Run check on ${n} PDF${n===1?'':'s'}`:'Run check';
+  $('#btnRun').title=ready?'':(n?'Add at least one result list (Excel) first':'Add PDFs first');
+  const fl=$('#filelist');
+  if(n){fl.innerHTML=FILES.slice(0,200).map(f=>esc(f.webkitRelativePath||f.name)).join('<br>')+(n>200?`<br>… and ${n-200} more`:'');fl.style.display='block';}else fl.style.display='none';
+}
+function addFiles(list){
+  const seen=new Set(FILES.map(f=>(f.webkitRelativePath||f.name)+'|'+f.size));
+  for(const f of list){
+    if(!/\.pdf$/i.test(f.name)) continue;
+    const k=(f.webkitRelativePath||f.name)+'|'+f.size; if(seen.has(k)) continue; seen.add(k); FILES.push(f);
+  }
+  updateRun();
+}
+$('#btnFolder').onclick=()=>$('#pickFolder').click();
+$('#btnPdf').onclick=()=>$('#pickPdf').click();
+$('#pickFolder').onchange=e=>{addFiles([...e.target.files]);e.target.value='';};
+$('#pickPdf').onchange=e=>{addFiles([...e.target.files]);e.target.value='';};
+$('#btnClear').onclick=()=>{FILES=[];updateRun();};
+async function walk(entry){
+  if(entry.isFile) return new Promise(res=>entry.file(f=>res([f]),()=>res([])));
+  if(!entry.isDirectory) return [];
+  const reader=entry.createReader(),all=[];
+  for(;;){const batch=await new Promise(res=>reader.readEntries(res,()=>res([])));if(!batch.length)break;for(const c of batch)all.push(...await walk(c));}
+  return all;
+}
+const dz=$('#drop');
+['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('over');}));
+['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('over');}));
+dz.addEventListener('drop',async e=>{
+  const dt=e.dataTransfer;
+  const entries=dt.items?[...dt.items].map(i=>i.kind==='file'&&i.webkitGetAsEntry?i.webkitGetAsEntry():null):[];
+  const direct=[...dt.files]; let files=[];
+  if(entries.length&&entries.every(Boolean)){for(const en of entries)files.push(...await walk(en));}else files=direct;
+  addFiles(files);
+});
+['dragover','drop'].forEach(ev=>window.addEventListener(ev,e=>e.preventDefault()));
+
+async function pdfText(file){
+  const doc=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+  let out='';
+  try{
+    for(let p=1;p<=doc.numPages;p++){
+      const tc=await (await doc.getPage(p)).getTextContent();
+      out+=layoutPageText(tc.items.map(i=>({s:i.str,x:i.transform[4],y:i.transform[5],w:i.width||0})))+'\n\n';
+    }
+  }finally{doc.destroy&&doc.destroy();}
+  return out;
+}
+
+/* ---------- run ---------- */
+$('#btnRun').onclick=async()=>{
+  const scaleKey=document.querySelector('input[name=scale]:checked').value, scale=SCALES[scaleKey];
+  const all=[...(SRC.LATEST?SRC.LATEST.records:[]),...(SRC.OLDER?SRC.OLDER.records:[])];
+  const byEnroll=new Map(); all.forEach(r=>{if(!byEnroll.has(r.enroll))byEnroll.set(r.enroll,[]);byEnroll.get(r.enroll).push(r);});
+  RESULTS=[];ISSUES=[];let id=0;
+  $('#btnRun').disabled=true;$('#btnClear').disabled=true;
+  const bar=$('#pbar'),fill=bar.firstElementChild,pt=$('#ptext');bar.style.display='block';pt.style.display='block';
+  const total=FILES.length;
+  for(let i=0;i<total;i++){
+    const f=FILES[i],path=f.webkitRelativePath||f.name;
+    pt.textContent=`Checking ${i+1} of ${total}: ${path}`;fill.style.width=(i/total*100)+'%';
+    await new Promise(r=>setTimeout(r,0));
+    try{
+      const sheets=parseTranscripts(await pdfText(f));
+      if(!sheets.length){RESULTS.push({id:id++,file:path,header:{},v:null,status:'UNREADABLE',error:'No marksheet found in this PDF (scanned image or a different format?)'});ISSUES.push({file:path,student:'',issue:'No marksheet found in this PDF (scanned image or a different format?)'});continue;}
+      sheets.forEach(st=>{
+        const v=verifyStudent(st,byEnroll.get(normEnroll(st.header.reg))||[],scale);
+        RESULTS.push({id:id++,file:path,header:st.header,v,status:v.status,error:''});
+        st.warnings.forEach(w=>ISSUES.push({file:path,student:st.header.name,issue:w}));
+      });
+    }catch(err){
+      const m='Could not read PDF: '+(err&&err.message||err);
+      RESULTS.push({id:id++,file:path,header:{},v:null,status:'UNREADABLE',error:m});ISSUES.push({file:path,student:'',issue:m});
+    }
+  }
+  fill.style.width='100%';pt.textContent=`Done — ${RESULTS.length} marksheet(s) from ${total} PDF(s).`;
+  RUNINFO={scaleKey,scaleFrom:SCALE_FROM,when:new Date(),pdfs:total};
+  $('#btnRun').disabled=false;$('#btnClear').disabled=false;updateRun();renderResults();
+};
+
+/* ---------- results screen ---------- */
+const STU_CLS={'ALL UPDATED':'ok','NOT UPDATED':'bad','GRADE MISMATCH':'bad','REVIEW':'warn','NO UPDATE DUE':'na','NO RECORD IN LISTS':'na','UNREADABLE':'warn'};
+const CRS_CLS={'UPDATED':'ok','NOT UPDATED':'bad','REVIEW':'warn','MISSING IN PDF':'warn','NO UPDATE DUE':'na'};
+const tag=(s,m)=>`<span class="tag ${m[s]||'na'}">${esc(s)}</span>`;
+function summaryCounts(){
+  const c=s=>RESULTS.filter(r=>r.status===s).length;
+  const cs=RESULTS.filter(r=>r.v).flatMap(r=>r.v.courses);
+  return {total:RESULTS.length,read:RESULTS.filter(r=>r.v).length,inLists:RESULTS.filter(r=>r.v&&r.v.hasRecords).length,
+    all:c('ALL UPDATED'),not:c('NOT UPDATED'),grade:c('GRADE MISMATCH'),review:c('REVIEW'),noDue:c('NO UPDATE DUE'),noRec:c('NO RECORD IN LISTS'),unread:c('UNREADABLE'),
+    courses:cs.length,cUpd:cs.filter(x=>x.status==='UPDATED').length,cNot:cs.filter(x=>x.status==='NOT UPDATED').length,
+    cRev:cs.filter(x=>x.status==='REVIEW').length+RESULTS.filter(r=>r.v).reduce((a,r)=>a+r.v.missing.filter(m=>m.status==='MISSING IN PDF').length,0),
+    cNoDue:cs.filter(x=>x.status==='NO UPDATE DUE').length,cGrade:cs.filter(x=>!x.gradeOK).length,
+    idBad:RESULTS.filter(r=>r.v&&r.v.hasRecords&&!r.v.identity.ok).length};
+}
+function renderResults(){
+  $('#results').style.display='block';
+  const S=summaryCounts();
+  $('#stats').innerHTML=
+    `<div class="stat"><b>${S.total}</b><span>Marksheets checked</span></div>`+
+    `<div class="stat"><b>${S.inLists}</b><span>Found in the lists</span></div>`+
+    `<div class="stat good"><b>${S.all}</b><span>All updated</span></div>`+
+    `<div class="stat bad"><b>${S.not}</b><span>Marks NOT updated</span></div>`+
+    `<div class="stat bad"><b>${S.grade}</b><span>Grade mismatch</span></div>`+
+    `<div class="stat warn"><b>${S.review}</b><span>Review</span></div>`+
+    `<div class="stat"><b>${S.noRec}</b><span>No record in lists</span></div>`+
+    `<div class="stat warn"><b>${S.unread}</b><span>Unreadable PDFs</span></div>`;
+  renderTable();$('#results').scrollIntoView({behavior:'smooth'});
+}
+function renderTable(){
+  const f=$('#filter').value,q=$('#search').value.trim().toLowerCase();
+  const ACTION=['NOT UPDATED','GRADE MISMATCH','REVIEW'];
+  const rows=RESULTS.filter(r=>(f==='all'||(f==='ACTION'?ACTION.includes(r.status):r.status===f))&&
+    (!q||[r.header.name,r.header.reg,r.file].some(v=>String(v||'').toLowerCase().includes(q))));
+  if(!rows.length){$('#tbody').innerHTML='<tr><td colspan="7" class="empty">Nothing to show for this filter.</td></tr>';return;}
+  $('#tbody').innerHTML=rows.map(r=>{
+    const h=r.header,v=r.v;
+    return `<tr class="main" data-id="${r.id}"><td>${esc(h.name||'—')}</td><td class="mono">${esc(h.reg||'—')}</td>
+      <td>${esc([h.programme,h.specialization].filter(Boolean).join(' · ')||'—')}</td>
+      <td>${v?v.courses.length:'—'}</td><td>${tag(r.status,STU_CLS)}</td><td>${v?v.counts.notUpdated:'—'}</td><td class="mono">${esc(r.file)}</td></tr>`;
+  }).join('');
+}
+$('#filter').onchange=renderTable;$('#search').oninput=renderTable;
+$('#tbody').addEventListener('click',e=>{
+  const tr=e.target.closest('tr.main');if(!tr)return;
+  const next=tr.nextElementSibling;
+  if(next&&next.classList.contains('detail')){next.remove();tr.classList.remove('open');return;}
+  const r=RESULTS.find(x=>x.id===+tr.dataset.id);
+  const d=document.createElement('tr');d.className='detail';d.innerHTML=`<td colspan="7" class="det">${detailHTML(r)}</td>`;
+  tr.after(d);tr.classList.add('open');
+});
+function detailHTML(r){
+  if(!r.v) return `<p>${esc(r.error)}</p>`;
+  const v=r.v,I=v.identity,H=r.header;
+  let h='';
+  if(!v.hasRecords) return `<p>No row for Registration No. <b>${esc(H.reg)}</b> was found in the loaded result lists, so there is nothing to compare for this student.</p>`;
+  const idRow=(lbl,a,b,st)=>`<tr><td>${lbl}</td><td>${esc(a)}</td><td>${esc(b)}</td><td>${tag(st==='MATCH'?'MATCH':st==='PARTIAL'?'PARTIAL':st==='DIFFERENT'?'DIFFERENT':'N/A',{MATCH:'ok',PARTIAL:'warn',DIFFERENT:'bad','N/A':'na'})}</td></tr>`;
+  h+=`<h3>Student identity</h3><table><thead><tr><th>Field</th><th>Marksheet</th><th>List</th><th>Result</th></tr></thead><tbody>`+
+     idRow('Name',H.name,I.sheetName,I.nameStatus)+idRow('Programme',H.programme,I.sheetProgramme,I.programmeStatus)+idRow('Specialization',H.specialization,I.sheetSpec||I.sheetProgramme,I.specStatus)+`</tbody></table>`;
+  h+=`<h3>Courses found in the lists (${v.courses.length} of ${v.pdfCourseCount} marksheet courses)</h3>`;
+  if(!v.courses.length&&!v.missing.length) h+='<p class="note">None of the list rows could be matched to a course on this marksheet.</p>';
+  else{
+    h+=`<table><thead><tr><th>Sem</th><th>Course</th><th>Marks (marksheet)</th><th>Grade (marksheet)</th><th>Latest result</th><th>Older marks</th><th>Correct grade</th><th>Marks</th><th>Grade</th><th>Remark</th></tr></thead><tbody>`;
+    for(const c of v.courses)
+      h+=`<tr><td>${esc(c.sem)}</td><td><span class="mono">${esc(c.code)}</span> ${esc(c.name)}</td>
+        <td class="${c.status==='NOT UPDATED'?'badcell':'okcell'}">${esc(c.pdfMarks)}</td><td class="${c.gradeOK?'okcell':'badcell'}">${esc(c.pdfGrade)}</td>
+        <td>${c.latestMarks!==''?esc(c.latestMarks)+' <span class="note">('+(c.source==='LATEST'?'latest list':'older list')+')</span>':'—'}</td>
+        <td>${c.olderMarks!==''?esc(c.olderMarks):'—'}</td><td>${esc(c.pdfExpGrade)}${c.expGrade&&c.expGrade!==c.pdfExpGrade?' <span class="note">(latest marks → '+esc(c.expGrade)+')</span>':''}</td>
+        <td>${tag(c.status,CRS_CLS)}</td><td>${c.gradeOK?'<span class="tag ok">OK</span>':'<span class="tag bad">MISMATCH</span>'}</td><td class="note">${esc(c.remark)}</td></tr>`;
+    for(const m of v.missing)
+      h+=`<tr><td>${esc(m.sem??'')}</td><td><span class="mono">${esc(m.code)}</span> ${esc(m.name)}</td><td>—</td><td>—</td><td>${m.latestMarks!==''?esc(m.latestMarks):'—'}</td><td>—</td><td>—</td><td>${tag(m.status,CRS_CLS)}</td><td>—</td><td class="note">${esc(m.remark)}</td></tr>`;
+    h+='</tbody></table>';
+  }
+  return h;
+}
+
+/* ═══════════════════════ formal Excel report ═══════════════════════ */
+function remarksFor(v){
+  if(!v) return '';
+  const p=[];
+  v.courses.filter(c=>c.status==='NOT UPDATED').forEach(c=>p.push(`${c.code||c.name}: marksheet shows ${c.pdfMarks}, latest result ${c.latestMarks} (grade ${c.expGrade}).`));
+  v.courses.filter(c=>!c.gradeOK).forEach(c=>p.push(`${c.code||c.name}: grade ${c.pdfGrade} should be ${c.pdfExpGrade} for ${c.pdfMarks} marks.`));
+  v.courses.filter(c=>c.status==='REVIEW').forEach(c=>p.push(`${c.code||c.name}: ${c.remark}`));
+  v.missing.filter(m=>m.status==='MISSING IN PDF').forEach(m=>p.push(`${m.code||m.name}: ${m.remark}`));
+  v.identity.notes.forEach(n=>p.push(n+'.'));
+  return p.join('\n');
+}
+async function buildExcel(){
+  const S=summaryCounts(), when=RUNINFO.when;
+  const pad=n=>String(n).padStart(2,'0');
+  const stamp=`${when.getFullYear()}${pad(when.getMonth()+1)}${pad(when.getDate())}_${pad(when.getHours())}${pad(when.getMinutes())}`;
+  const nice=when.toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const wb=new ExcelJS.Workbook();wb.creator='Medhavi Skills University — Marksheet Update Checker';wb.created=when;
+  const NAVY='FF1F3864',FONT='Calibri',BORDER={style:'thin',color:{argb:'FFBFBFBF'}};
+  const border={top:BORDER,left:BORDER,bottom:BORDER,right:BORDER};
+  const fillOf=a=>({type:'pattern',pattern:'solid',fgColor:{argb:a}});
+  const ST={ok:['FFE2EFDA','FF375623'],bad:['FFFCE4D6','FF9C0006'],warn:['FFFFF2CC','FF7F6000'],na:['FFEDEDED','FF404040']};
+  const kind=s=>({'UPDATED':'ok','ALL UPDATED':'ok','OK':'ok','MATCH':'ok','NOT UPDATED':'bad','GRADE MISMATCH':'bad','MISMATCH':'bad','DIFFERENT':'bad','CHECK':'bad','REVIEW':'warn','PARTIAL':'warn','MISSING IN PDF':'warn','UNREADABLE':'warn'}[s]||'na');
+  const paint=(cell,s)=>{const k=ST[kind(s)];cell.fill=fillOf(k[0]);cell.font={name:FONT,size:10,bold:true,color:{argb:k[1]}};cell.alignment={horizontal:'center',vertical:'middle',wrapText:true};};
+  const numOr=v=>v!==''&&v!=null&&isFinite(v)?Number(v):(v==null?'':v);
+
+  function sheet(name,title,headers,widths,rows,opts={}){
+    const ws=wb.addWorksheet(name,{views:[{state:'frozen',ySplit:5,showGridLines:false}]});
+    const n=headers.length;
+    ws.mergeCells(1,1,1,n);ws.getCell(1,1).value='MEDHAVI SKILLS UNIVERSITY';ws.getCell(1,1).font={name:FONT,size:14,bold:true,color:{argb:NAVY}};
+    ws.mergeCells(2,1,2,n);ws.getCell(2,1).value='Marksheet Update Verification Report — '+title;ws.getCell(2,1).font={name:FONT,size:11,bold:true};
+    ws.mergeCells(3,1,3,n);ws.getCell(3,1).value='Generated on '+nice+' · Grade scale applied: '+RUNINFO.scaleKey.toUpperCase();ws.getCell(3,1).font={name:FONT,size:9,italic:true,color:{argb:'FF595959'}};
+    const hr=ws.getRow(5);hr.height=32;
+    headers.forEach((h,i)=>{const c=hr.getCell(i+1);c.value=h;c.font={name:FONT,size:10,bold:true,color:{argb:'FFFFFFFF'}};c.fill=fillOf(NAVY);c.border=border;c.alignment={horizontal:'center',vertical:'middle',wrapText:true};});
+    widths.forEach((w,i)=>ws.getColumn(i+1).width=w);
+    rows.forEach((r,ri)=>{
+      const row=ws.getRow(6+ri);
+      r.forEach((v,ci)=>{
+        const c=row.getCell(ci+1);c.value=v;c.border=border;c.font={name:FONT,size:10};
+        c.alignment={vertical:'top',wrapText:true,horizontal:(opts.center||[]).includes(ci)?'center':'left'};
+        if(ri%2===1) c.fill=fillOf('FFF7F9FC');
+        if((opts.status||[]).includes(ci)&&v!=='') paint(c,String(v));
+      });
+    });
+    if(rows.length) ws.autoFilter={from:{row:5,column:1},to:{row:5+rows.length,column:n}};
+    ws.pageSetup={paperSize:9,orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0,printTitlesRow:'5:5',margins:{left:.4,right:.4,top:.6,bottom:.6,header:.3,footer:.3}};
+    ws.headerFooter.oddFooter='&L&"Calibri,Italic"&8Medhavi Skills University&C&"Calibri"&8Page &P of &N&R&"Calibri"&8&D';
+    return ws;
+  }
+  const done=RESULTS.filter(r=>r.v);
+  const sheetRef=r=>r?`${r.file} › ${r.sheet} › row ${r.rowNo}`:'';
+  const roleLabel=r=>r==='LATEST'?'Latest list (Updated Supplementary)':r==='OLDER'?'Older list (Master Backlog)':'—';
+
+  /* ---- 1. Summary ---- */
+  {
+    const ws=wb.addWorksheet('Summary',{views:[{showGridLines:false}]});
+    ws.columns=[{width:46},{width:70},{width:22}];
+    ws.mergeCells('A1:C1');ws.getCell('A1').value='MEDHAVI SKILLS UNIVERSITY';ws.getCell('A1').font={name:FONT,size:16,bold:true,color:{argb:NAVY}};
+    ws.mergeCells('A2:C2');ws.getCell('A2').value='Marksheet Update Verification Report';ws.getCell('A2').font={name:FONT,size:13,bold:true};
+    ws.mergeCells('A3:C3');ws.getCell('A3').value='Generated on '+nice;ws.getCell('A3').font={name:FONT,size:9,italic:true,color:{argb:'FF595959'}};
+    let r=5;
+    const section=t=>{ws.mergeCells(r,1,r,3);const c=ws.getCell(r,1);c.value=t;c.font={name:FONT,size:11,bold:true,color:{argb:'FFFFFFFF'}};c.fill=fillOf(NAVY);c.alignment={vertical:'middle'};ws.getRow(r).height=20;r++;};
+    const line=(a,b,c,style)=>{[a,b,c].forEach((v,i)=>{const cell=ws.getCell(r,i+1);cell.value=v===undefined?'':v;cell.border=border;cell.font={name:FONT,size:10,bold:i===0};cell.alignment={vertical:'top',wrapText:true,horizontal:i===2?'center':'left'};});if(style)paint(ws.getCell(r,3),style);r++;};
+    section('1. Source files');
+    line('Latest list (Updated Supplementary)',SRC.LATEST?SRC.LATEST.file:'— not provided —',SRC.LATEST?SRC.LATEST.records.length+' rows':'');
+    line('Older list (Master Backlog)',SRC.OLDER?SRC.OLDER.file:'— not provided —',SRC.OLDER?SRC.OLDER.records.length+' rows':'');
+    line('Grade scale file',RUNINFO.scaleFrom,'');
+    line('Grade scale applied to the marksheets',RUNINFO.scaleKey==='old'?'Old scale':'New scale','');
+    line('Marksheet PDFs read',String(RUNINFO.pdfs)+' PDF file(s)','');
+    r++;section('2. Verification method');
+    [['Student identification','Registration / Enrollment No. from the marksheet is looked up in the lists. Name, programme and specialization are cross-checked.'],
+     ['Course matching','A marksheet course is matched to a list row by course code or by subject name (semester used to break ties).'],
+     ['Which result is final','The Latest list overrides the Older list. A row counts as a real result only if "To update on TruScholar" = Yes (Latest list) or Attendance = Present (Older list). Absent / "No" rows are not updates.'],
+     ['UPDATED','Marks on the marksheet equal the final result in the lists.'],
+     ['NOT UPDATED','Marks on the marksheet differ from the final result (the report says whether the older marks are still shown).'],
+     ['Grade check','The grade printed for the marks is checked against the grade scale applied above.'],
+     ['REVIEW','Needs a manual look: marks differ from the earlier marks with no new result, a valid list row missing from the marksheet, or name / programme / specialization differs.']
+    ].forEach(x=>line(x[0],x[1],''));
+    r++;section('3. Results at a glance');
+    [['Marksheets checked',S.total,''],['Marksheets that could be read',S.read,''],['Students found in the lists',S.inLists,''],
+     ['Students — all marks updated',S.all,S.all?'ok':''],['Students — marks NOT updated',S.not,S.not?'NOT UPDATED':''],['Students — grade mismatch',S.grade,S.grade?'GRADE MISMATCH':''],
+     ['Students — review required',S.review,S.review?'REVIEW':''],['Students — no update due',S.noDue,''],['Students — no record in the lists',S.noRec,''],
+     ['Unreadable PDFs',S.unread,S.unread?'UNREADABLE':''],['Students with name / programme / specialization difference',S.idBad,S.idBad?'CHECK':''],
+     ['Courses verified against the lists',S.courses,''],['Courses — updated correctly',S.cUpd,''],['Courses — NOT updated',S.cNot,S.cNot?'NOT UPDATED':''],
+     ['Courses — grade mismatch',S.cGrade,S.cGrade?'GRADE MISMATCH':''],['Courses — review',S.cRev,''],['Courses — no update due',S.cNoDue,'']
+    ].forEach(x=>{ws.getCell(r,1).value=x[0];ws.getCell(r,2).value=x[1];ws.getCell(r,2).alignment={horizontal:'left'};
+      [1,2].forEach(i=>{const c=ws.getCell(r,i);c.border=border;c.font={name:FONT,size:10,bold:i===1};});
+      if(x[2]){const k=ST[kind(x[2]==='ok'?'OK':x[2])];ws.getCell(r,2).fill=fillOf(k[0]);ws.getCell(r,2).font={name:FONT,size:10,bold:true,color:{argb:k[1]}};}
+      r++;});
+    r++;section('4. Sheets in this workbook');
+    [['Student Report','One row per student: identity check, counts and overall status.'],['Course Verification','One row per course found in the lists: marksheet marks vs latest / older result, grade check.'],
+     ['Action Required','Only the items that need correction or a manual check.'],['Source Records','The list rows used for these students, with the reason a row counts or not.'],['PDF Issues','PDFs that could not be read, or were read with warnings.']
+    ].forEach(x=>line(x[0],x[1],''));
+    ws.pageSetup={paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:.5,right:.5,top:.6,bottom:.6,header:.3,footer:.3}};
+    ws.headerFooter.oddFooter='&L&"Calibri,Italic"&8Medhavi Skills University&C&"Calibri"&8Page &P of &N&R&"Calibri"&8&D';
+  }
+
+  /* ---- 2. Student Report ---- */
+  sheet('Student Report','Student Report',
+    ['S.No.','Registration No.','Student Name (Marksheet)','Programme (Marksheet)','Specialization (Marksheet)','Name (List)','Programme (List)','Specialization (List)','Identity Check','Courses Found in Lists','Updated','Not Updated','Review','No Update Due','Grade Mismatch','Overall Status','Remarks','PDF File'],
+    [7,18,26,22,20,26,16,18,12,11,9,10,9,10,10,20,60,34],
+    RESULTS.map((x,i)=>{
+      const h=x.header,v=x.v;
+      if(!v) return [i+1,h.reg||'',h.name||'',h.programme||'',h.specialization||'','','','','','','','','','','','UNREADABLE',x.error,x.file];
+      const I=v.identity;
+      return [i+1,h.reg||'',h.name||'',h.programme||'',h.specialization||'',I.sheetName,I.sheetProgramme,I.sheetSpec,
+        v.hasRecords?(I.ok?'OK':'CHECK'):'NOT IN LISTS',v.courses.length,v.counts.updated,v.counts.notUpdated,v.counts.review,v.counts.noUpdateDue,v.counts.gradeMismatch,v.status,remarksFor(v),x.file];
+    }),{status:[8,15],center:[0,1,9,10,11,12,13,14]});
+
+  /* ---- 3. Course Verification ---- */
+  {
+    const rows=[];let n=0;
+    done.forEach(x=>{
+      const h=x.header,v=x.v;
+      v.courses.forEach(c=>rows.push([++n,h.reg||'',h.name||'',h.programme||'',h.specialization||'',c.sem,c.code,c.name,c.tpp,numOr(c.pdfMarks),c.pdfGrade,
+        roleLabel(c.source),numOr(c.latestMarks),numOr(c.olderMarks),c.olderSource,c.pdfExpGrade,c.expGrade,c.status,c.gradeOK?'OK':'MISMATCH',c.remark,sheetRef(c.latestRec||c.recs[0])]));
+      v.missing.forEach(m=>rows.push([++n,h.reg||'',h.name||'',h.programme||'',h.specialization||'',m.sem??'',m.code,m.name,'','','',
+        roleLabel(m.source),numOr(m.latestMarks),'','','','',m.status,'',m.remark,sheetRef(m.recs[0])]));
+    });
+    sheet('Course Verification','Course Verification',
+      ['S.No.','Registration No.','Student Name','Programme','Specialization','Semester','Course Code','Course Name','Credits (T-P-PR)','Marks (Marksheet)','Grade (Marksheet)','Final Result Source','Latest Marks','Older Marks','Older Marks Source','Correct Grade for Marksheet Marks','Correct Grade for Latest Marks','Marks Status','Grade Status','Remarks','List Reference'],
+      [7,18,26,22,20,9,12,38,11,11,11,28,10,10,24,14,14,16,12,60,44],rows,{status:[17,18],center:[0,1,5,6,8,9,10,12,13,15,16]});
+  }
+
+  /* ---- 4. Action Required ---- */
+  {
+    const rows=[];let n=0;
+    done.forEach(x=>{
+      const h=x.header,v=x.v;
+      const base=[h.reg||'',h.name||'',h.programme||'',h.specialization||''];
+      v.courses.forEach(c=>{
+        if(c.status==='NOT UPDATED') rows.push([++n,...base,c.sem,c.code,c.name,'Marks not updated',numOr(c.pdfMarks),c.pdfGrade,numOr(c.latestMarks),c.expGrade,c.remark,x.file]);
+        else if(c.status==='REVIEW') rows.push([++n,...base,c.sem,c.code,c.name,'Review required',numOr(c.pdfMarks),c.pdfGrade,'','',c.remark,x.file]);
+        if(!c.gradeOK) rows.push([++n,...base,c.sem,c.code,c.name,'Grade incorrect for marks',numOr(c.pdfMarks),c.pdfGrade,'',c.pdfExpGrade,`Grade ${c.pdfGrade} printed for ${c.pdfMarks} marks; correct grade is ${c.pdfExpGrade}.`,x.file]);
+      });
+      v.missing.filter(m=>m.status==='MISSING IN PDF').forEach(m=>rows.push([++n,...base,m.sem??'',m.code,m.name,'Course missing on marksheet','','',numOr(m.latestMarks),'',m.remark,x.file]));
+      if(v.hasRecords&&!v.identity.ok) rows.push([++n,...base,'','','','Name / programme / specialization differs','','','','',v.identity.notes.join('. '),x.file]);
+    });
+    sheet('Action Required','Items Requiring Correction or Review',
+      ['S.No.','Registration No.','Student Name','Programme','Specialization','Semester','Course Code','Course Name','Issue','Marksheet Shows (Marks)','Marksheet Shows (Grade)','Should Show (Marks)','Should Show (Grade)','Details','PDF File'],
+      [7,18,26,22,20,9,12,36,28,12,12,12,12,64,34],rows,{center:[0,1,5,6,9,10,11,12]});
+  }
+
+  /* ---- 5. Source Records ---- */
+  {
+    const seen=new Set(),rows=[];
+    done.forEach(x=>x.v.recs.forEach(r=>{
+      const k=r.file+'|'+r.sheet+'|'+r.rowNo; if(seen.has(k)) return; seen.add(k);
+      rows.push([r.enroll,roleLabel(r.role),r.file,r.sheet,r.rowNo,r.name,r.program,r.spec,r.sem??'',r.code,r.subj,r.credit,numOr(r.before),r.attendance,numOr(r.obtained),numOr(r.grace),numOr(r.total),
+        r.hasFlag?r.update:'(no such column)',r.valid?'Yes':'No',r.passfail,r.exam,r.term]);
+    }));
+    sheet('Source Records','Source Records from the Result Lists',
+      ['Registration No.','List','File','Sheet','Row','Name','Programme','Specialization','Sem','Course Code','Subject','Credit Structure','Marks Before Supp. Exam','Attendance','Marks Obtained','Grace','Total Marks','To Update on TruScholar','Counts as Valid Result?','Pass / Fail','Exam','Term'],
+      [18,30,34,16,7,26,12,16,6,12,36,11,12,11,11,8,10,22,12,10,14,26],rows,{center:[0,4,8,9,11,12,13,14,15,16,18]});
+  }
+
+  /* ---- 6. PDF Issues ---- */
+  sheet('PDF Issues','PDF Issues',['S.No.','PDF File','Student','Issue'],[7,50,28,90],ISSUES.map((x,i)=>[i+1,x.file,x.student,x.issue]),{center:[0]});
+
+  const buf=await wb.xlsx.writeBuffer();
+  return {buf,name:`Marksheet_Update_Verification_Report_${stamp}.xlsx`};
+}
+$('#btnXlsx').onclick=async()=>{
+  if(typeof ExcelJS==='undefined'){alert('The Excel library could not be loaded (check your internet connection).');return;}
+  const {buf,name}=await buildExcel();
+  const url=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);
+};
+updateRun();
+</script>
+</body>
+</html>
